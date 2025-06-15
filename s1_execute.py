@@ -682,7 +682,7 @@ while True:
             logging.info(" CE: No red-green pattern.")
 
         if ce_alert:
-            logging.info("🚀 CE Alert Condition Satisfied (on OTM CE)! Monitoring next 5 minutes for live trigger...")
+            logging.info(" CE Alert Condition Satisfied (on OTM CE)! Monitoring next 5 minutes for live trigger...")
 
             ce_trigger = False
             trade_active_ce = False
@@ -695,15 +695,15 @@ while True:
                     ce_ltp = ce_ltp_data.get(ce_symbol, {}).get("last_price")
 
                     if ce_ltp is None:
-                        logging.warning("⚠️ CE LTP fetch failed. Retrying...")
+                        logging.warning(" CE LTP fetch failed. Retrying...")
                         time.sleep(1)
                         continue
 
-                    logging.info(f"📡 Live CE LTP: {ce_ltp} | Waiting for trigger above: {active_alert['trigger_high']}")
+                    logging.info(f" Live CE LTP: {ce_ltp} | Waiting for trigger above: {active_alert['trigger_high']}")
 
                     if ce_ltp > active_alert["trigger_high"]:
                         ce_trigger = True
-                        logging.info(f"🚀 CE Trigger Success! Executing Buy Order at LTP: {ce_ltp}")
+                        logging.info(f" CE Trigger Success! Executing Buy Order at LTP: {ce_ltp}")
 
                         try:
                             order_id = kite.place_order(
@@ -716,33 +716,33 @@ while True:
                                 product=kite.PRODUCT_MIS
                             )
 
-                            logging.info(f"✅ CE Buy Order Placed: {ce_symbol} | Order ID: {order_id}")
+                            logging.info(f" CE Buy Order Placed: {ce_symbol} | Order ID: {order_id}")
 
                             stop_loss = active_alert["stop_loss"]
                             target_price = active_alert["target"]
-                            logging.info(f"📌 CE SL: {stop_loss}, Target: {target_price}")
+                            logging.info(f" CE SL: {stop_loss}, Target: {target_price}")
 
                             trade_active_ce = True
 
                         except Exception as e:
-                            logging.error(f"❌ CE Buy Order Failed: {e}")
+                            logging.error(f" CE Buy Order Failed: {e}")
                             break
 
-                        # ✅ Live Monitoring After Entry
+                        #  Live Monitoring After Entry
                         while trade_active_ce:
                             try:
                                 ce_ltp_data = kite.ltp(ce_symbol)
                                 latest_ce_ltp = ce_ltp_data.get(ce_symbol, {}).get("last_price")
 
                                 if latest_ce_ltp is None:
-                                    logging.warning("⚠️ Failed to fetch CE LTP during trade. Retrying...")
+                                    logging.warning(" Failed to fetch CE LTP during trade. Retrying...")
                                     time.sleep(1)
                                     continue
 
-                                logging.info(f"📊 CE LTP in Trade: {latest_ce_ltp}")
+                                logging.info(f" CE LTP in Trade: {latest_ce_ltp}")
 
                                 if latest_ce_ltp <= stop_loss:
-                                    logging.info(f"🚨 Stop Loss Hit on CE! Exiting at CMP ({latest_ce_ltp})")
+                                    logging.info(f" Stop Loss Hit on CE! Exiting at CMP ({latest_ce_ltp})")
                                     kite.place_order(
                                         variety=kite.VARIETY_REGULAR,
                                         exchange=kite.EXCHANGE_NFO,
@@ -756,7 +756,7 @@ while True:
                                     break
 
                                 if latest_ce_ltp >= target_price:
-                                    logging.info(f"🎯 Target Hit on CE! Exiting at CMP ({latest_ce_ltp})")
+                                    logging.info(f" Target Hit on CE! Exiting at CMP ({latest_ce_ltp})")
                                     kite.place_order(
                                         variety=kite.VARIETY_REGULAR,
                                         exchange=kite.EXCHANGE_NFO,
@@ -772,19 +772,19 @@ while True:
                                 time.sleep(1)
 
                             except Exception as e:
-                                logging.error(f"❌ Error while monitoring CE trade: {e}")
+                                logging.error(f" Error while monitoring CE trade: {e}")
                                 time.sleep(1)
 
                         break  # Exit trigger loop once trade begins
 
                 except Exception as e:
-                    logging.error(f"❌ Error fetching CE LTP: {e}")
+                    logging.error(f" Error fetching CE LTP: {e}")
                     time.sleep(1)
 
             if not ce_trigger:
-                logging.info("❌ CE Trigger Failed! No entry signal within 5 minutes.")
+                logging.info(" CE Trigger Failed! No entry signal within 5 minutes.")
         else:
-            logging.info("❌ CE Alert NOT satisfied. Skipping CE trigger monitoring.")
+            logging.info(" CE Alert NOT satisfied. Skipping CE trigger monitoring.")
 
 
 
@@ -839,7 +839,7 @@ while True:
             logging.info(" PE: No red-green pattern.")
 
         if pe_alert:
-            logging.info("🚀 PE Alert Condition Satisfied (on OTM PE)! Monitoring next 5 minutes for live trigger...")
+            logging.info(" PE Alert Condition Satisfied (on OTM PE)! Monitoring next 5 minutes for live trigger...")
 
             pe_trigger = False
             trade_active_pe = False
@@ -852,15 +852,15 @@ while True:
                     pe_ltp = pe_ltp_data.get(pe_symbol, {}).get("last_price")
 
                     if pe_ltp is None:
-                        logging.warning("⚠️ PE LTP fetch failed. Retrying...")
+                        logging.warning(" PE LTP fetch failed. Retrying...")
                         time.sleep(1)
                         continue
 
-                    logging.info(f"📡 Live PE LTP: {pe_ltp} | Waiting for trigger above: {active_alert['trigger_high']}")
+                    logging.info(f" Live PE LTP: {pe_ltp} | Waiting for trigger above: {active_alert['trigger_high']}")
 
                     if pe_ltp > active_alert["trigger_high"]:
                         pe_trigger = True
-                        logging.info(f"🚀 PE Trigger Success! Executing Buy Order at LTP: {pe_ltp}")
+                        logging.info(f" PE Trigger Success! Executing Buy Order at LTP: {pe_ltp}")
 
                         try:
                             order_id = kite.place_order(
@@ -873,33 +873,33 @@ while True:
                                 product=kite.PRODUCT_MIS
                             )
 
-                            logging.info(f"✅ PE Buy Order Placed: {pe_symbol} | Order ID: {order_id}")
+                            logging.info(f" PE Buy Order Placed: {pe_symbol} | Order ID: {order_id}")
 
                             stop_loss = active_alert["stop_loss"]
                             target_price = active_alert["target"]
-                            logging.info(f"📌 PE SL: {stop_loss}, Target: {target_price}")
+                            logging.info(f" PE SL: {stop_loss}, Target: {target_price}")
 
                             trade_active_pe = True
 
                         except Exception as e:
-                            logging.error(f"❌ PE Buy Order Failed: {e}")
+                            logging.error(f" PE Buy Order Failed: {e}")
                             break
 
-                        # ✅ Live Monitoring After Entry
+                        #  Live Monitoring After Entry
                         while trade_active_pe:
                             try:
                                 pe_ltp_data = kite.ltp(pe_symbol)
                                 latest_pe_ltp = pe_ltp_data.get(pe_symbol, {}).get("last_price")
 
                                 if latest_pe_ltp is None:
-                                    logging.warning("⚠️ Failed to fetch PE LTP during trade. Retrying...")
+                                    logging.warning(" Failed to fetch PE LTP during trade. Retrying...")
                                     time.sleep(1)
                                     continue
 
-                                logging.info(f"📊 PE LTP in Trade: {latest_pe_ltp}")
+                                logging.info(f" PE LTP in Trade: {latest_pe_ltp}")
 
                                 if latest_pe_ltp <= stop_loss:
-                                    logging.info(f"🚨 Stop Loss Hit on PE! Exiting at CMP ({latest_pe_ltp})")
+                                    logging.info(f" Stop Loss Hit on PE! Exiting at CMP ({latest_pe_ltp})")
                                     kite.place_order(
                                         variety=kite.VARIETY_REGULAR,
                                         exchange=kite.EXCHANGE_NFO,
@@ -913,7 +913,7 @@ while True:
                                     break
 
                                 if latest_pe_ltp >= target_price:
-                                    logging.info(f"🎯 Target Hit on PE! Exiting at CMP ({latest_pe_ltp})")
+                                    logging.info(f" Target Hit on PE! Exiting at CMP ({latest_pe_ltp})")
                                     kite.place_order(
                                         variety=kite.VARIETY_REGULAR,
                                         exchange=kite.EXCHANGE_NFO,
@@ -929,18 +929,18 @@ while True:
                                 time.sleep(1)
 
                             except Exception as e:
-                                logging.error(f"❌ Error while monitoring PE trade: {e}")
+                                logging.error(f" Error while monitoring PE trade: {e}")
                                 time.sleep(1)
 
                         break  # Exit trigger loop once trade begins
 
                 except Exception as e:
-                    logging.error(f"❌ Error fetching PE LTP: {e}")
+                    logging.error(f" Error fetching PE LTP: {e}")
                     time.sleep(1)
 
             if not pe_trigger:
-                logging.info("❌ PE Trigger Failed! No entry signal within 5 minutes.")
+                logging.info(" PE Trigger Failed! No entry signal within 5 minutes.")
         else:
-            logging.info("❌ PE Alert NOT satisfied. Skipping PE trigger monitoring.")
+            logging.info(" PE Alert NOT satisfied. Skipping PE trigger monitoring.")
     
     time.sleep(1) # Small delay to avoid excessive CPU usage 
