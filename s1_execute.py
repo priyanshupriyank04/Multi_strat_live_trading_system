@@ -26,8 +26,8 @@ logging.info(" Required libraries imported successfully.")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 #  API Credentials
-API_KEY = "api_key"  #  Replace with your actual API key
-API_SECRET = "api_secret"  #  Replace with your actual API secret
+API_KEY = "8re7mjcm2btaozwf"  #  Replace with your actual API key
+API_SECRET = "fw8gm7wfeclcic9rlkp0tbzx4h2ss2n1"  #  Replace with your actual API secret
 ACCESS_TOKEN_FILE = "access_token.txt"
 
 #  Initialize KiteConnect
@@ -283,8 +283,7 @@ def get_nearest_otm_ce_contract(nifty_index_price):
             logging.warning(" No CE contracts found for selected expiry.")
             return None, None
 
-        atm_strike = round((nifty_index_price // 50) * 50)
-        otm_strike = atm_strike + 50  #  1 step OTM for CE
+        otm_strike = int(math.ceil(nifty_index_price / 50) * 50)
         best_ce = min(ce_options, key=lambda x: abs(x["strike"] - otm_strike))
 
         ltp = get_nifty50_option_price(best_ce["instrument_token"])
@@ -313,8 +312,7 @@ def get_nearest_otm_pe_contract(nifty_index_price):
             logging.warning(" No PE contracts found for selected expiry.")
             return None, None
 
-        atm_strike = round((nifty_index_price // 50) * 50)
-        otm_strike = atm_strike - 50  #  1 step OTM for PE
+        otm_strike = int(math.floor(nifty_index_price / 50) * 50 )
         best_pe = min(pe_options, key=lambda x: abs(x["strike"] - otm_strike))
 
         ltp = get_nifty50_option_price(best_pe["instrument_token"])
@@ -634,15 +632,15 @@ while True:
 
         #  CE: Check Red-Green pattern + EMA-33 trend
         cur.execute(f"""
-            SELECT timestamp, open, high, low, close, ema_22, ema_33, max_channel
+            SELECT timestamp, open, high, low, close, ema_22, ema_33, max_channel, min_channel , supertrend_avg
             FROM {ce_table}
-            WHERE ema_33 IS NOT NULL AND max_channel IS NOT NULL
+            WHERE ema_33 IS NOT NULL AND max_channel IS NOT NULL AND ema_22 IS NOT NULL AND min_channel IS NOT NULL AND supertrend_avg IS NOT NULL
             ORDER BY timestamp DESC
-            LIMIT 5;
+            LIMIT 3;
         """)
         ce_rows = cur.fetchall()
 
-        if len(ce_rows) < 5:
+        if len(ce_rows) < 3:
             logging.warning(" Not enough CE candles to evaluate alert condition.")
             time.sleep(1)
             continue
@@ -659,35 +657,68 @@ while True:
                 "close": row[4],
                 "ema_22": row[5],
                 "ema_33": row[6],
-                "max_channel": row[7]
+                "max_channel": row[7],
+                "min_channel": row[8],
+                "supertrend_avg": row[9],
             })
 
         ce_red = ce_candles[-2]
         ce_green = ce_candles[-1]
         ce_alert = False
 
-        if ce_red["close"] < ce_red["open"] and ce_green["close"] > ce_green["open"]:
-            if (ce_candles[-5]["ema_33"] <= ce_candles[-4]["ema_33"] <= ce_candles[-3]["ema_33"]):
-                logging.info(" ALERT: Red-Green pair + EMA-33 rising trend detected (CE)")
+        # Combined alert condition in one block
+        if (
+            ce_candles[-3]["ema_33"] <= ce_candles[-2]["ema_33"] <= ce_candles[-1]["ema_33"] and #33 EMA rising condition 
+            ce_candles[-3]["ema_22"] > ce_candles[-3]["ema_33"] and     # 22 EMA above 33 ema condition                          
+            ce_candles[-2]["ema_22"] > ce_candles[-2]["ema_33"] and
+            ce_candles[-1]["ema_22"] > ce_candles[-1]["ema_33"] and
+            ce_red["close"] < ce_red["open"] and        # red candle check 
+            ce_green["close"] > ce_green["open"] and    #green candle check 
+            ce_red["open"] > ce_red["ema_22"] > ce_red["close"] #
+        ):
+            logging.info("All alert conditions satisfied moving to trigger condition check")
 
-                ce_alert = True
-                active_alert["timestamp"] = ce_green["timestamp"]
-                active_alert["trigger_high"] = ce_green["high"]
-                active_alert["stop_loss"] = ce_green["low"]
-                active_alert["target"] = ce_green["max_channel"]
-                trigger_monitoring_start = datetime.datetime.now()
-            else:
-                logging.info(" CE: EMA-33 not rising consistently.")
+            # Fetch live CE LTP
+            try:
+                ce_ltp_data = kite.ltp(ce_symbol)
+                ce_ltp = ce_ltp_data.get(ce_symbol, {}).get("last_price")
+
+                if ce_ltp is None:
+                    logging.warning(" Unable to fetch CE LTP for T1/T2 calculation. Skipping alert.")
+                else:
+                    # Compute T1 and T2
+                    green_close = ce_green["close"]
+                    green_low = ce_green["low"]
+                    risk = abs(green_close - green_low)
+
+                    t1_target = round(ce_ltp + risk, 2)
+                    t2_target = round(ce_ltp + 2 * risk, 2)
+
+                    # Mark alert and save details
+                    ce_alert = True
+                    active_alert["timestamp"] = ce_green["timestamp"]
+                    active_alert["trigger_high"] = ce_green["high"]
+                    active_alert["stop_loss"] = green_low
+                    active_alert["target"] = t1_target  # First target set as 1:1 RR
+
+                    trigger_monitoring_start = datetime.datetime.now()
+
+                    logging.info(f" CE LTP: {ce_ltp}, T1: {t1_target}, T2: {t2_target}")
+
+            except Exception as e:
+                logging.error(f" Error fetching CE LTP or calculating targets: {e}")
+
         else:
-            logging.info(" CE: No red-green pattern.")
+            logging.info(" CE Alert Condition NOT met. Skipping.")
+
 
         if ce_alert:
-            logging.info(" CE Alert Condition Satisfied (on OTM CE)! Monitoring next 5 minutes for live trigger...")
+            logging.info(" CE Alert Condition Satisfied (on OTM CE)! Monitoring next 10 minutes for live trigger...")
 
             ce_trigger = False
             trade_active_ce = False
             start_time = datetime.datetime.now()
-            trigger_window = datetime.timedelta(minutes=5)
+            trigger_window = datetime.timedelta(minutes=10)
 
             while datetime.datetime.now() - start_time <= trigger_window:
                 try:
@@ -711,16 +742,22 @@ while True:
                                 exchange=kite.EXCHANGE_NFO,
                                 tradingsymbol=ce_symbol,
                                 transaction_type=kite.TRANSACTION_TYPE_BUY,
-                                quantity=75,
+                                quantity=0,  # 2 lots
                                 order_type=kite.ORDER_TYPE_MARKET,
                                 product=kite.PRODUCT_MIS
                             )
 
                             logging.info(f" CE Buy Order Placed: {ce_symbol} | Order ID: {order_id}")
 
+                            entry_price = ce_ltp
                             stop_loss = active_alert["stop_loss"]
-                            target_price = active_alert["target"]
-                            logging.info(f" CE SL: {stop_loss}, Target: {target_price}")
+                            risk = abs(entry_price - stop_loss)
+
+                            t1_target = active_alert["target"]
+                            t2_target = round(entry_price + 2 * risk, 2)
+
+                            current_target = t1_target
+                            logging.info(f" CE SL: {stop_loss}, T1: {t1_target}, T2: {t2_target}")
 
                             trade_active_ce = True
 
@@ -728,7 +765,7 @@ while True:
                             logging.error(f" CE Buy Order Failed: {e}")
                             break
 
-                        #  Live Monitoring After Entry
+                        #  Trade Monitoring Loop
                         while trade_active_ce:
                             try:
                                 ce_ltp_data = kite.ltp(ce_symbol)
@@ -741,28 +778,62 @@ while True:
 
                                 logging.info(f" CE LTP in Trade: {latest_ce_ltp}")
 
-                                if latest_ce_ltp <= stop_loss:
-                                    logging.info(f" Stop Loss Hit on CE! Exiting at CMP ({latest_ce_ltp})")
+                                #  SL hit before T1
+                                if latest_ce_ltp <= stop_loss and stop_loss != t1_target:
+                                    logging.info(f" SL Hit on CE before T1! Exiting full 2 lots at CMP ({latest_ce_ltp})")
                                     kite.place_order(
                                         variety=kite.VARIETY_REGULAR,
                                         exchange=kite.EXCHANGE_NFO,
                                         tradingsymbol=ce_symbol,
                                         transaction_type=kite.TRANSACTION_TYPE_SELL,
-                                        quantity=75,
+                                        quantity=0, #2 lots
                                         order_type=kite.ORDER_TYPE_MARKET,
                                         product=kite.PRODUCT_MIS
                                     )
                                     trade_active_ce = False
                                     break
 
-                                if latest_ce_ltp >= target_price:
-                                    logging.info(f" Target Hit on CE! Exiting at CMP ({latest_ce_ltp})")
+                                #  SL hit after T1 (trailing SL)
+                                if latest_ce_ltp <= stop_loss and stop_loss == t1_target:
+                                    logging.info(f" Trailing SL Hit! Exiting final 1 lot at CMP ({latest_ce_ltp})")
                                     kite.place_order(
                                         variety=kite.VARIETY_REGULAR,
                                         exchange=kite.EXCHANGE_NFO,
                                         tradingsymbol=ce_symbol,
                                         transaction_type=kite.TRANSACTION_TYPE_SELL,
-                                        quantity=75,
+                                        quantity=0, #1 lot
+                                        order_type=kite.ORDER_TYPE_MARKET,
+                                        product=kite.PRODUCT_MIS
+                                    )
+                                    trade_active_ce = False
+                                    break
+
+                                #  T1 Hit → sell 1 lot, trail SL and update target
+                                if latest_ce_ltp >= current_target and current_target == t1_target:
+                                    logging.info(f" T1 Target Hit! Booking 1 lot at CMP ({latest_ce_ltp})")
+                                    kite.place_order(
+                                        variety=kite.VARIETY_REGULAR,
+                                        exchange=kite.EXCHANGE_NFO,
+                                        tradingsymbol=ce_symbol,
+                                        transaction_type=kite.TRANSACTION_TYPE_SELL,
+                                        quantity=0, # 1 lot
+                                        order_type=kite.ORDER_TYPE_MARKET,
+                                        product=kite.PRODUCT_MIS
+                                    )
+                                    stop_loss = t1_target
+                                    current_target = t2_target
+                                    logging.info(f" Updated SL to T1: {stop_loss}, Updated Target to T2: {current_target}")
+                                    continue
+
+                                #  T2 Hit → sell remaining 1 lot
+                                if latest_ce_ltp >= current_target and current_target == t2_target:
+                                    logging.info(f" T2 Target Hit! Booking final 1 lot at CMP ({latest_ce_ltp})")
+                                    kite.place_order(
+                                        variety=kite.VARIETY_REGULAR,
+                                        exchange=kite.EXCHANGE_NFO,
+                                        tradingsymbol=ce_symbol,
+                                        transaction_type=kite.TRANSACTION_TYPE_SELL,
+                                        quantity=0, # 1 lot
                                         order_type=kite.ORDER_TYPE_MARKET,
                                         product=kite.PRODUCT_MIS
                                     )
@@ -782,24 +853,25 @@ while True:
                     time.sleep(1)
 
             if not ce_trigger:
-                logging.info(" CE Trigger Failed! No entry signal within 5 minutes.")
+                logging.info(" CE Trigger Failed! No entry signal within 10 minutes.")
         else:
             logging.info(" CE Alert NOT satisfied. Skipping CE trigger monitoring.")
 
 
 
 
+
         #  PE: Check Red-Green pattern + EMA-33 trend
         cur.execute(f"""
-            SELECT timestamp, open, high, low, close, ema_22, ema_33, max_channel
+            SELECT timestamp, open, high, low, close, ema_22, ema_33, max_channel, min_channel, supertrend_avg
             FROM {pe_table}
-            WHERE ema_33 IS NOT NULL AND max_channel IS NOT NULL
+            WHERE ema_33 IS NOT NULL AND max_channel IS NOT NULL AND ema_22 IS NOT NULL AND min_channel IS NOT NULL AND supertrend_avg IS NOT NULL
             ORDER BY timestamp DESC
-            LIMIT 5;
+            LIMIT 3;
         """)
         pe_rows = cur.fetchall()
 
-        if len(pe_rows) < 5:
+        if len(pe_rows) < 3:
             logging.warning("Not enough PE candles to evaluate alert condition.")
             time.sleep(1)
             continue
@@ -816,35 +888,68 @@ while True:
                 "close": row[4],
                 "ema_22": row[5],
                 "ema_33": row[6],
-                "max_channel": row[7]
+                "max_channel": row[7],
+                "min_channel": row[8],
+                "supertrend_avg": row[9]
             })
 
         pe_red = pe_candles[-2]
         pe_green = pe_candles[-1]
         pe_alert = False
 
-        if pe_red["close"] < pe_red["open"] and pe_green["close"] > pe_green["open"]:
-            if (pe_candles[-5]["ema_33"] <= pe_candles[-4]["ema_33"] <= pe_candles[-3]["ema_33"]):
-                logging.info(" ALERT: Red-Green pair + EMA-33 rising trend detected (PE)")
+        # Combined alert condition in one block
+        if (
+            pe_candles[-3]["ema_33"] <= pe_candles[-2]["ema_33"] <= pe_candles[-1]["ema_33"] and  # 33 EMA rising
+            pe_candles[-3]["ema_22"] > pe_candles[-3]["ema_33"] and
+            pe_candles[-2]["ema_22"] > pe_candles[-2]["ema_33"] and
+            pe_candles[-1]["ema_22"] > pe_candles[-1]["ema_33"] and
+            pe_red["close"] < pe_red["open"] and       # red candle
+            pe_green["close"] > pe_green["open"] and   # green candle
+            pe_red["open"] > pe_red["ema_22"] > pe_red["close"]  # EMA-22 inside red candle
+        ):
+            logging.info(" ALERT: Red-Green pair + EMA-33 rising + EMA-22 > EMA-33 + EMA-22 inside red candle (PE)")
 
-                pe_alert = True
-                active_alert["timestamp"] = pe_green["timestamp"]
-                active_alert["trigger_high"] = pe_green["high"]
-                active_alert["stop_loss"] = pe_green["low"]
-                active_alert["target"] = pe_green["max_channel"]
-                rigger_monitoring_start = datetime.datetime.now()
-            else:
-                logging.info(" PE: EMA-33 not rising consistently.")
+            # Fetch live PE LTP
+            try:
+                pe_ltp_data = kite.ltp(pe_symbol)
+                pe_ltp = pe_ltp_data.get(pe_symbol, {}).get("last_price")
+
+                if pe_ltp is None:
+                    logging.warning(" Unable to fetch PE LTP for T1/T2 calculation. Skipping alert.")
+                else:
+                    # Compute T1 and T2
+                    green_close = pe_green["close"]
+                    green_low = pe_green["low"]
+                    risk = abs(green_close - green_low)
+
+                    t1_target = round(pe_ltp + risk, 2)
+                    t2_target = round(pe_ltp + 2 * risk, 2)
+
+                    # Mark alert and save details
+                    pe_alert = True
+                    active_alert["timestamp"] = pe_green["timestamp"]
+                    active_alert["trigger_high"] = pe_green["high"]
+                    active_alert["stop_loss"] = green_low
+                    active_alert["target"] = t1_target  # First target = 1:1 RR
+
+                    trigger_monitoring_start = datetime.datetime.now()
+
+                    logging.info(f" PE LTP: {pe_ltp}, T1: {t1_target}, T2: {t2_target}")
+
+            except Exception as e:
+                    logging.error(f" Error fetching PE LTP or calculating targets: {e}")
+
         else:
-            logging.info(" PE: No red-green pattern.")
+            logging.info(" PE Alert Condition NOT met. Skipping.")
+
 
         if pe_alert:
-            logging.info(" PE Alert Condition Satisfied (on OTM PE)! Monitoring next 5 minutes for live trigger...")
+            logging.info(" PE Alert Condition Satisfied (on OTM PE)! Monitoring next 10 minutes for live trigger...")
 
             pe_trigger = False
             trade_active_pe = False
             start_time = datetime.datetime.now()
-            trigger_window = datetime.timedelta(minutes=5)
+            trigger_window = datetime.timedelta(minutes=10)
 
             while datetime.datetime.now() - start_time <= trigger_window:
                 try:
@@ -868,16 +973,22 @@ while True:
                                 exchange=kite.EXCHANGE_NFO,
                                 tradingsymbol=pe_symbol,
                                 transaction_type=kite.TRANSACTION_TYPE_BUY,
-                                quantity=75,
+                                quantity=0,  # 2 lots
                                 order_type=kite.ORDER_TYPE_MARKET,
                                 product=kite.PRODUCT_MIS
                             )
 
                             logging.info(f" PE Buy Order Placed: {pe_symbol} | Order ID: {order_id}")
 
+                            entry_price = pe_ltp
                             stop_loss = active_alert["stop_loss"]
-                            target_price = active_alert["target"]
-                            logging.info(f" PE SL: {stop_loss}, Target: {target_price}")
+                            risk = abs(entry_price - stop_loss)
+
+                            t1_target = active_alert["target"]
+                            t2_target = round(entry_price + 2 * risk, 2)
+
+                            current_target = t1_target
+                            logging.info(f" PE SL: {stop_loss}, T1: {t1_target}, T2: {t2_target}")
 
                             trade_active_pe = True
 
@@ -885,7 +996,7 @@ while True:
                             logging.error(f" PE Buy Order Failed: {e}")
                             break
 
-                        #  Live Monitoring After Entry
+                        #  Trade Monitoring Loop
                         while trade_active_pe:
                             try:
                                 pe_ltp_data = kite.ltp(pe_symbol)
@@ -898,28 +1009,62 @@ while True:
 
                                 logging.info(f" PE LTP in Trade: {latest_pe_ltp}")
 
-                                if latest_pe_ltp <= stop_loss:
-                                    logging.info(f" Stop Loss Hit on PE! Exiting at CMP ({latest_pe_ltp})")
+                                #  SL hit before T1 → exit full
+                                if latest_pe_ltp <= stop_loss and stop_loss != t1_target:
+                                    logging.info(f" SL Hit on PE before T1! Exiting full 2 lots at CMP ({latest_pe_ltp})")
                                     kite.place_order(
                                         variety=kite.VARIETY_REGULAR,
                                         exchange=kite.EXCHANGE_NFO,
                                         tradingsymbol=pe_symbol,
                                         transaction_type=kite.TRANSACTION_TYPE_SELL,
-                                        quantity=75,
+                                        quantity=0, # 2 lots
                                         order_type=kite.ORDER_TYPE_MARKET,
                                         product=kite.PRODUCT_MIS
                                     )
                                     trade_active_pe = False
                                     break
 
-                                if latest_pe_ltp >= target_price:
-                                    logging.info(f" Target Hit on PE! Exiting at CMP ({latest_pe_ltp})")
+                                #  SL hit after T1 (trailing SL) → sell 1 lot
+                                if latest_pe_ltp <= stop_loss and stop_loss == t1_target:
+                                    logging.info(f" Trailing SL Hit on PE! Exiting final 1 lot at CMP ({latest_pe_ltp})")
                                     kite.place_order(
                                         variety=kite.VARIETY_REGULAR,
                                         exchange=kite.EXCHANGE_NFO,
                                         tradingsymbol=pe_symbol,
                                         transaction_type=kite.TRANSACTION_TYPE_SELL,
-                                        quantity=75,
+                                        quantity=0, # 1 lot
+                                        order_type=kite.ORDER_TYPE_MARKET,
+                                        product=kite.PRODUCT_MIS
+                                    )
+                                    trade_active_pe = False
+                                    break
+
+                                #  T1 Hit → sell 1 lot, trail SL and update target
+                                if latest_pe_ltp >= current_target and current_target == t1_target:
+                                    logging.info(f" T1 Target Hit on PE! Booking 1 lot at CMP ({latest_pe_ltp})")
+                                    kite.place_order(
+                                        variety=kite.VARIETY_REGULAR,
+                                        exchange=kite.EXCHANGE_NFO,
+                                        tradingsymbol=pe_symbol,
+                                        transaction_type=kite.TRANSACTION_TYPE_SELL,
+                                        quantity=0, # 1 lot
+                                        order_type=kite.ORDER_TYPE_MARKET,
+                                        product=kite.PRODUCT_MIS
+                                    )
+                                    stop_loss = t1_target
+                                    current_target = t2_target
+                                    logging.info(f" Updated PE SL to T1: {stop_loss}, Updated Target to T2: {current_target}")
+                                    continue
+
+                                #  T2 Hit → sell final 1 lot
+                                if latest_pe_ltp >= current_target and current_target == t2_target:
+                                    logging.info(f" T2 Target Hit on PE! Booking final 1 lot at CMP ({latest_pe_ltp})")
+                                    kite.place_order(
+                                        variety=kite.VARIETY_REGULAR,
+                                        exchange=kite.EXCHANGE_NFO,
+                                        tradingsymbol=pe_symbol,
+                                        transaction_type=kite.TRANSACTION_TYPE_SELL,
+                                        quantity=0, # 1 lot
                                         order_type=kite.ORDER_TYPE_MARKET,
                                         product=kite.PRODUCT_MIS
                                     )
@@ -939,8 +1084,9 @@ while True:
                     time.sleep(1)
 
             if not pe_trigger:
-                logging.info(" PE Trigger Failed! No entry signal within 5 minutes.")
+                logging.info(" PE Trigger Failed! No entry signal within 10 minutes.")
         else:
             logging.info(" PE Alert NOT satisfied. Skipping PE trigger monitoring.")
+
     
     time.sleep(1) # Small delay to avoid excessive CPU usage 

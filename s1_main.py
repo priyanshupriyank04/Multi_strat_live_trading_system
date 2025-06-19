@@ -21,8 +21,8 @@ logging.info(" Required libraries imported successfully.")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 #  API Credentials
-API_KEY = "api_key"  #  Replace with your actual API key
-API_SECRET = "api_secret"  # Replace with your actual API secret
+API_KEY = "8re7mjcm2btaozwf"  #  Replace with your actual API key
+API_SECRET = "fw8gm7wfeclcic9rlkp0tbzx4h2ss2n1"  # Replace with your actual API secret
 ACCESS_TOKEN_FILE = "access_token.txt"
 
 #  Initialize KiteConnect
@@ -305,16 +305,8 @@ def create_nearest_otm_ohlc_tables(ce_symbol, pe_symbol):
                     low FLOAT,
                     close FLOAT,
                     volume FLOAT,
-                    adx FLOAT,
-                    di_plus FLOAT,
-                    di_minus FLOAT,
                     ema_22 FLOAT,
                     ema_33 FLOAT,
-                    stoch_k FLOAT,
-                    stoch_d FLOAT,
-                    odd_bull FLOAT,
-                    odd_bear FLOAT,
-                    odd_stagnant FLOAT,
                     hl2 FLOAT,
                     atr FLOAT,
                     initial_upper_bar FLOAT,
@@ -325,7 +317,10 @@ def create_nearest_otm_ohlc_tables(ce_symbol, pe_symbol):
                     spt FLOAT,
                     max_channel FLOAT,
                     min_channel FLOAT,
-                    supertrend_avg FLOAT
+                    supertrend_avg FLOAT,
+                    adx FLOAT,
+                    di_plus FLOAT,
+                    di_minus FLOAT
 
                 );
             """)
@@ -339,16 +334,8 @@ def create_nearest_otm_ohlc_tables(ce_symbol, pe_symbol):
                     low FLOAT,
                     close FLOAT,
                     volume FLOAT,
-                    adx FLOAT,
-                    di_plus FLOAT,
-                    di_minus FLOAT,
                     ema_22 FLOAT,
                     ema_33 FLOAT,
-                    stoch_k FLOAT,
-                    stoch_d FLOAT,
-                    odd_bull FLOAT,
-                    odd_bear FLOAT,
-                    odd_stagnant FLOAT,
                     hl2 FLOAT,
                     atr FLOAT,
                     initial_upper_bar FLOAT,
@@ -359,7 +346,10 @@ def create_nearest_otm_ohlc_tables(ce_symbol, pe_symbol):
                     spt FLOAT,
                     max_channel FLOAT,
                     min_channel FLOAT,
-                    supertrend_avg FLOAT
+                    supertrend_avg FLOAT,
+                    adx FLOAT,
+                    di_plus FLOAT,
+                    di_minus FLOAT
                 );
             """)
 
@@ -567,7 +557,7 @@ def fetch_last_trading_day_ohlc_for_table(table_name, instrument_token, interval
                     row["high"],
                     row["low"],
                     row["close"],
-                    row["volume"]  #  Added for CBOE indicator
+                    row["volume"]
                 ))
 
             conn.commit()
@@ -630,7 +620,7 @@ def fetch_and_merge_ohlc_for_table(table_name, instrument_token, interval="5minu
                     row["high"],
                     row["low"],
                     row["close"],
-                    row["volume"]  #  Volume added for CBOE indicator
+                    row["volume"]  
                 ))
 
             conn.commit()
@@ -800,6 +790,76 @@ initialize_current_tokens()
 import pandas as pd
 import numpy as np
 
+def calculate_ema_for_table(table_name: str, length: int):
+    """
+    Calculates Exponential Moving Average (EMA) of 'close' for a given length
+    and updates the specified table's corresponding column (ema_<length>).
+    """
+    column_name = f"ema_{length}"
+    try:
+        conn = connect_to_db()
+        if not conn:
+            logging.error(" DB connection failed for EMA calculation.")
+            return
+
+        cur = conn.cursor()
+
+        #  Step 1: Ensure EMA column exists
+        cur.execute(f"""
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_name = %s AND column_name = %s;
+        """, (table_name, column_name))
+        result = cur.fetchone()
+
+        if not result:
+            cur.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} FLOAT;")
+            logging.info(f" Added missing column: {column_name} to table {table_name}")
+
+        #  Step 2: Fetch close prices
+        cur.execute(f"SELECT timestamp, close FROM {table_name} ORDER BY timestamp ASC;")
+        rows = cur.fetchall()
+        if not rows:
+            logging.warning(f" No data found in table {table_name} for EMA-{length} calculation.")
+            return
+
+        df = pd.DataFrame(rows, columns=["timestamp", "close"])
+
+        #  Step 3: Calculate EMA
+        df[column_name] = df["close"].ewm(span=length, adjust=False).mean()
+
+        #  Step 4: Update table
+        for _, row in df.iterrows():
+            cur.execute(
+                f"""
+                UPDATE {table_name}
+                SET {column_name} = %s
+                WHERE timestamp = %s;
+                """,
+                (
+                    round(row[column_name], 4) if not pd.isna(row[column_name]) else None,
+                    row["timestamp"]
+                )
+            )
+
+        conn.commit()
+        logging.info(f" EMA-{length} updated for table {table_name}")
+
+        cur.close()
+        conn.close()
+
+    except Exception as e:
+        logging.error(f" Error in calculate_ema_for_table({table_name}, {length}): {e}")
+
+
+calculate_ema_for_table(nearest_contracts["CE"]["table_5min"], length=22)
+calculate_ema_for_table(nearest_contracts["CE"]["table_5min"], length=33)
+calculate_ema_for_table(nearest_contracts["PE"]["table_5min"], length=22)
+calculate_ema_for_table(nearest_contracts["PE"]["table_5min"], length=33)
+
+import pandas as pd
+import numpy as np
+
 def calculate_adx_for_table(table_name: str, period: int = 2):
     """
     Calculates ADX, DI+, and DI− using Wilder's smoothing (matching Pine Script)
@@ -890,230 +950,6 @@ def calculate_adx_for_table(table_name: str, period: int = 2):
 
 calculate_adx_for_table(nearest_contracts["CE"]["table_5min"], period=2)
 calculate_adx_for_table(nearest_contracts["PE"]["table_5min"], period=2)
-
-
-def calculate_ema_for_table(table_name: str, length: int):
-    """
-    Calculates Exponential Moving Average (EMA) of 'close' for a given length
-    and updates the specified table's corresponding column (ema_<length>).
-    """
-    column_name = f"ema_{length}"
-    try:
-        conn = connect_to_db()
-        if not conn:
-            logging.error(" DB connection failed for EMA calculation.")
-            return
-
-        cur = conn.cursor()
-
-        #  Step 1: Ensure EMA column exists
-        cur.execute(f"""
-            SELECT column_name
-            FROM information_schema.columns
-            WHERE table_name = %s AND column_name = %s;
-        """, (table_name, column_name))
-        result = cur.fetchone()
-
-        if not result:
-            cur.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} FLOAT;")
-            logging.info(f" Added missing column: {column_name} to table {table_name}")
-
-        #  Step 2: Fetch close prices
-        cur.execute(f"SELECT timestamp, close FROM {table_name} ORDER BY timestamp ASC;")
-        rows = cur.fetchall()
-        if not rows:
-            logging.warning(f" No data found in table {table_name} for EMA-{length} calculation.")
-            return
-
-        df = pd.DataFrame(rows, columns=["timestamp", "close"])
-
-        #  Step 3: Calculate EMA
-        df[column_name] = df["close"].ewm(span=length, adjust=False).mean()
-
-        #  Step 4: Update table
-        for _, row in df.iterrows():
-            cur.execute(
-                f"""
-                UPDATE {table_name}
-                SET {column_name} = %s
-                WHERE timestamp = %s;
-                """,
-                (
-                    round(row[column_name], 4) if not pd.isna(row[column_name]) else None,
-                    row["timestamp"]
-                )
-            )
-
-        conn.commit()
-        logging.info(f" EMA-{length} updated for table {table_name}")
-
-        cur.close()
-        conn.close()
-
-    except Exception as e:
-        logging.error(f" Error in calculate_ema_for_table({table_name}, {length}): {e}")
-
-
-calculate_ema_for_table(nearest_contracts["CE"]["table_5min"], length=22)
-calculate_ema_for_table(nearest_contracts["CE"]["table_5min"], length=33)
-calculate_ema_for_table(nearest_contracts["PE"]["table_5min"], length=22)
-calculate_ema_for_table(nearest_contracts["PE"]["table_5min"], length=33)
-
-
-def f_sum(series: pd.Series, length: int) -> pd.Series:
-    """
-    Equivalent of Pine Script's f_sum: rolling sum over the last 'length' periods.
-    """
-    length = max(1, length)  # match PineScript behavior
-    return series.rolling(window=length).sum()
-
-
-def calculate_cboe_for_table(table_name: str, smoothK=3, smoothD=3, lengthRSI=14, lengthStoch=14, lengthcboe=7):
-    """
-    Calculates the custom CBOE indicator and updates the database table with the results.
-
-    Parameters:
-    - table_name (str): Name of the PostgreSQL table.
-    - smoothK (int): Smoothing period for Stochastic RSI K line.
-    - smoothD (int): Smoothing period for Stochastic RSI D line.
-    - lengthRSI (int): Period for base RSI calculation.
-    - lengthStoch (int): Period for Stochastic RSI.
-    - lengthcboe (int): Period for secondary RSI used in market odds.
-    """
-    try:
-        conn = connect_to_db()
-        if not conn:
-            logging.error(" DB connection failed for CBOE calculation.")
-            return
-
-        cur = conn.cursor()
-
-        # Data fetching, processing, and updating will go here in next steps
-        # Step 1: Fetch data from the DB
-        cur.execute(f"SELECT timestamp, close, volume FROM {table_name} ORDER BY timestamp ASC;")
-        rows = cur.fetchall()
-        if not rows:
-            logging.warning(f" No data in {table_name} for RSI calculation.")
-            return
-
-        df = pd.DataFrame(rows, columns=["timestamp", "close", "volume"])
-
-        # Step 2: Calculate RSI using Wilder-style smoothing (ta.rsi)
-        def calculate_rsi_rma(series, length):
-            delta = series.diff()
-            gain = delta.clip(lower=0)
-            loss = -delta.clip(upper=0)
-            avg_gain = gain.ewm(alpha=1/length, adjust=False).mean()
-            avg_loss = loss.ewm(alpha=1/length, adjust=False).mean()
-            rs = avg_gain / avg_loss
-            rsi = 100 - (100 / (1 + rs))
-            return rsi
-
-        # Pine-style RSI calculation
-        df["rsi1"] = calculate_rsi_rma(df["close"], lengthRSI)
-
-        logging.info(" Saved RSI (rsi1) values to data.csv for comparison.")
-
-        # Step 3: Calculate Stochastic RSI
-        rsi_min = df["rsi1"].rolling(window=lengthStoch).min()
-        rsi_max = df["rsi1"].rolling(window=lengthStoch).max()
-
-        # Handle divide-by-zero with np.nan to match TradingView behavior
-        df["stoch_rsi"] = 100 * (df["rsi1"] - rsi_min) / (rsi_max - rsi_min)
-        df["k"] = df["stoch_rsi"].rolling(window=smoothK).mean()
-        df["d"] = df["k"].rolling(window=smoothD).mean()
-
-        # Step 4: Save values to CSV for debug/plotting in TradingView
-        df[["timestamp","k", "d"]].to_csv("data.csv", index=False)
-
-        logging.info(" Saved RSI + Stochastic RSI (k, d) to data.csv for debug.")
-
-        # Step 4: CBOE RSI-based oscillator
-        df["rs"] = calculate_rsi_rma(df["close"], lengthcboe)
-        df["rh"] = df["rs"].rolling(window=lengthcboe).max()
-        df["rl"] = df["rs"].rolling(window=lengthcboe).min()
-
-        df["stch"] = 100 * (df["rs"] - df["rl"]) / (df["rh"] - df["rl"])
-        df["stch1"] = 100 - df["stch"]
-
-        # Step X: Compute intermediate CBOE metrics
-        df["f1"] = df["stch"] * df["stch1"] / 100
-        df["f2"] = df["stch"] - df["f1"]
-        df["f3"] = df["stch1"] - df["f1"]
-        df["f4"] = df["f1"] + df["f2"] + df["f3"]
-
-        df["newsk"] = df["stch"].rolling(window=3).mean()
-
-        # Step X: Match TradingView's logic for volume-weighted price change
-        df["change"] = df["close"].diff()
-
-        # Apply Pine-style logic using ta.change(src)
-        df["up_input"] = np.where(df["change"] > 0, df["close"], 0)
-        df["down_input"] = np.where(df["change"] < 0, df["close"], 0)
-
-        df["up_volume_price"] = df["volume"] * df["up_input"]
-        df["down_volume_price"] = df["volume"] * df["down_input"]
-
-        df["upper_s"] = f_sum(df["up_volume_price"], lengthcboe)
-        df["lower_s"] = f_sum(df["down_volume_price"], lengthcboe)
-
-        df["R"] = df["upper_s"] / df["lower_s"].replace(0, np.nan)
-        df["market_index"] = 100 - (100 / (1 + df["R"]))
-
-        # Step X: Derive price-bullish, bearish, stagnant structure
-        df["_bull_gross"] = df["market_index"]
-        df["_bear_gross"] = 100 - df["market_index"]
-
-        df["_price_stagnant"] = (df["_bull_gross"] * df["_bear_gross"]) / 100
-        df["_price_bull"] = df["_bull_gross"] - df["_price_stagnant"]
-        df["_price_bear"] = df["_bear_gross"] - df["_price_stagnant"]
-
-
-        # Step X: Normalize the price values into a probability distribution
-        df["_coeff_price"] = (df["_price_stagnant"] + df["_price_bull"] + df["_price_bear"]) / 100
-
-        df["_bull"] = df["_price_bull"] / df["_coeff_price"]
-        df["_bear"] = df["_price_bear"] / df["_coeff_price"]
-        df["_stagnant"] = df["_price_stagnant"] / df["_coeff_price"]
-
-        # Apply PCR factor using f2, f3, f4
-        df["_temp_stagnant"] = df["_stagnant"] * (1 + (df["f3"] / df["f4"]))
-        df["_temp_bull"] = df["_bull"] * (1 + (df["f2"] / df["f4"]))
-        df["_temp_bear"] = df["_bear"] * (1 + (df["f3"] / df["f4"]))
-
-        df["_coeff"] = (df["_temp_stagnant"] + df["_temp_bull"] + df["_temp_bear"]) / 100
-
-        df["_odd_bull"] = df["_temp_bull"] / df["_coeff"]
-        df["_odd_bear"] = df["_temp_bear"] / df["_coeff"]
-        df["_odd_stagnant"] = df["_temp_stagnant"] / df["_coeff"]
-
-        # Step Y: Update final indicators into the database
-        for _, row in df.iterrows():
-            cur.execute(f"""
-                UPDATE {table_name}
-                SET 
-                    stoch_k = %s,
-                    stoch_d = %s,
-                    odd_bull = %s,
-                    odd_bear = %s,
-                    odd_stagnant = %s
-                WHERE timestamp = %s;
-            """, (
-                round(row["k"], 4) if not pd.isna(row["k"]) else None,
-                round(row["d"], 4) if not pd.isna(row["d"]) else None,
-                round(row["_odd_bull"], 4) if not pd.isna(row["_odd_bull"]) else None,
-                round(row["_odd_bear"], 4) if not pd.isna(row["_odd_bear"]) else None,
-                round(row["_odd_stagnant"], 4) if not pd.isna(row["_odd_stagnant"]) else None,
-                row["timestamp"]
-            ))
-
-
-        conn.commit()
-        logging.info(f" Updated indicators for table: {table_name}")
-    except Exception as e:
-        logging.error(f" Error in calculate_cboe_for_table({table_name}): {e}")
-        
-calculate_cboe_for_table(nearest_contracts["CE"]["table_5min"])
 
 #  Calculate HL2 (High + Low) / 2 for a specific table
 def calculate_hl2_for_table(table_name):
@@ -2041,7 +1877,7 @@ def process_ohlc_candle():
                         "high": max(five_min_prices),
                         "low": min(five_min_prices),
                         "close": five_min_prices[-1],
-                        #Volume is fetched historically from the kite api as soon as 5min candle finishes
+                        # Volume is fetched historically from the kite api as soon as 5min candle finishes
                         "volume": get_verified_5min_volume(token, five_min_start)
                     }
                     logging.info(f" 5-min OHLC for Token {token}: {five_min_entry}")
@@ -2070,10 +1906,9 @@ def process_ohlc_candle():
                     calculate_max_channel_for_table(table_name)
                     calculate_min_channel_for_table(table_name)
                     calculate_supertrend_avg_for_table(table_name)
-                    calculate_adx_for_table(table_name, period=2)
                     calculate_ema_for_table(table_name, length=22)
                     calculate_ema_for_table(table_name, length=33)
-                    calculate_cboe_for_table(table_name)
+                    calculate_adx_for_table(table_name,period=2)
 
                     # logging.info(f" Indicators recalculated for {table_name}")
 
@@ -2126,10 +1961,10 @@ def process_ohlc_candle():
                             calculate_max_channel_for_table(f"{ce_symbol.lower()}_ohlc_5min")
                             calculate_min_channel_for_table(f"{ce_symbol.lower()}_ohlc_5min")
                             calculate_supertrend_avg_for_table(f"{ce_symbol.lower()}_ohlc_5min")
-                            calculate_adx_for_table(f"{ce_symbol.lower()}_ohlc_5min", period=2)
+                            calculate_adx_for_table(f"{ce_symbol.lower()}_ohlc_5min",period=2)
                             calculate_ema_for_table(f"{ce_symbol.lower()}_ohlc_5min", length=22)
                             calculate_ema_for_table(f"{ce_symbol.lower()}_ohlc_5min", length=33)
-                            calculate_cboe_for_table(f"{ce_symbol.lower()}_ohlc_5min")
+                            
 
                             
 
@@ -2144,11 +1979,10 @@ def process_ohlc_candle():
                             calculate_max_channel_for_table(f"{pe_symbol.lower()}_ohlc_5min")
                             calculate_min_channel_for_table(f"{pe_symbol.lower()}_ohlc_5min")
                             calculate_supertrend_avg_for_table(f"{pe_symbol.lower()}_ohlc_5min")
-                            calculate_adx_for_table(f"{pe_symbol.lower()}_ohlc_5min", period=2)
+                            calculate_adx_for_table(f"{pe_symbol.lower()}_ohlc_5min",period=2)
                             calculate_ema_for_table(f"{pe_symbol.lower()}_ohlc_5min", length=22)
                             calculate_ema_for_table(f"{pe_symbol.lower()}_ohlc_5min", length=33)
-                            calculate_cboe_for_table(f"{pe_symbol.lower()}_ohlc_5min")
-
+                            
                         
 
                             logging.info(" New Nearest OTM Switching completed successfully!")
