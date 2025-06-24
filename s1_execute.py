@@ -26,8 +26,8 @@ logging.info(" Required libraries imported successfully.")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 #  API Credentials
-API_KEY = "8re7mjcm2btaozwf"  #  Replace with your actual API key
-API_SECRET = "fw8gm7wfeclcic9rlkp0tbzx4h2ss2n1"  #  Replace with your actual API secret
+API_KEY = "your_api_key"  #  Replace with your actual API key
+API_SECRET = "secret_key"  #  Replace with your actual API secret
 ACCESS_TOKEN_FILE = "access_token.txt"
 
 #  Initialize KiteConnect
@@ -573,7 +573,7 @@ while True:
 
     #  Step 2: Compute reqd_time as the largest multiple of 5 that is LESS THAN curtime
     if curtime % 5 == 0:
-        time.sleep(15)
+        time.sleep(5)
         reqd_time = (curtime - 5) % 60  # If curtime is a multiple of 5, take the previous multiple
     else:
         reqd_time = (curtime // 5) * 5  # Otherwise, take the largest multiple of 5 below curtime
@@ -628,7 +628,7 @@ while True:
     if last_logged_time != reqd_time:  # Log only when a new candle appears
         last_logged_time = reqd_time  # Update last_logged_time
 
-        time.sleep(7)  #  Slight wait to ensure DB update is complete
+        time.sleep(5)  #  Slight wait to ensure DB update is complete
 
         #  CE: Check Red-Green pattern + EMA-33 trend
         cur.execute(f"""
@@ -676,7 +676,7 @@ while True:
             ce_green["close"] > ce_green["open"] and    #green candle check 
             ce_red["open"] > ce_red["ema_22"] > ce_red["close"] #
         ):
-            logging.info("All alert conditions satisfied moving to trigger condition check")
+            logging.info("✅ All alert conditions satisfied for 22 & 33 EMA strategy moving to trigger condition check")
 
             # Fetch live CE LTP
             try:
@@ -709,11 +709,11 @@ while True:
                 logging.error(f" Error fetching CE LTP or calculating targets: {e}")
 
         else:
-            logging.info(" CE Alert Condition NOT met. Skipping.")
+            logging.info("❌  CE Alert Condition NOT met for 22 & 33 EMA strategy. Skipping.")
 
 
         if ce_alert:
-            logging.info(" CE Alert Condition Satisfied (on OTM CE)! Monitoring next 10 minutes for live trigger...")
+            logging.info("✅  CE Alert Condition Satisfied (on OTM CE) for 22 & 33 EMA strategy! Monitoring next 10 minutes for live trigger...")
 
             ce_trigger = False
             trade_active_ce = False
@@ -734,7 +734,7 @@ while True:
 
                     if ce_ltp > active_alert["trigger_high"]:
                         ce_trigger = True
-                        logging.info(f" CE Trigger Success! Executing Buy Order at LTP: {ce_ltp}")
+                        logging.info(f"✅  CE Trigger Success for 22 & 33 EMA strategy! Executing Buy Order at LTP: {ce_ltp}")
 
                         try:
                             order_id = kite.place_order(
@@ -780,7 +780,7 @@ while True:
 
                                 #  SL hit before T1
                                 if latest_ce_ltp <= stop_loss and stop_loss != t1_target:
-                                    logging.info(f" SL Hit on CE before T1! Exiting full 2 lots at CMP ({latest_ce_ltp})")
+                                    logging.info(f" ❌ SL Hit on CE before T1 for 22 & 33 EMA strategy! Exiting full 2 lots at CMP ({latest_ce_ltp})")
                                     kite.place_order(
                                         variety=kite.VARIETY_REGULAR,
                                         exchange=kite.EXCHANGE_NFO,
@@ -795,7 +795,7 @@ while True:
 
                                 #  SL hit after T1 (trailing SL)
                                 if latest_ce_ltp <= stop_loss and stop_loss == t1_target:
-                                    logging.info(f" Trailing SL Hit! Exiting final 1 lot at CMP ({latest_ce_ltp})")
+                                    logging.info(f"❌  Trailing SL Hit for 22 & 33 EMA strategy! Exiting final 1 lot at CMP ({latest_ce_ltp})")
                                     kite.place_order(
                                         variety=kite.VARIETY_REGULAR,
                                         exchange=kite.EXCHANGE_NFO,
@@ -810,7 +810,7 @@ while True:
 
                                 #  T1 Hit → sell 1 lot, trail SL and update target
                                 if latest_ce_ltp >= current_target and current_target == t1_target:
-                                    logging.info(f" T1 Target Hit! Booking 1 lot at CMP ({latest_ce_ltp})")
+                                    logging.info(f" ✅ T1 Target Hit for 22 & 33 EMA strategy! Booking 1 lot at CMP ({latest_ce_ltp})")
                                     kite.place_order(
                                         variety=kite.VARIETY_REGULAR,
                                         exchange=kite.EXCHANGE_NFO,
@@ -827,7 +827,7 @@ while True:
 
                                 #  T2 Hit → sell remaining 1 lot
                                 if latest_ce_ltp >= current_target and current_target == t2_target:
-                                    logging.info(f" T2 Target Hit! Booking final 1 lot at CMP ({latest_ce_ltp})")
+                                    logging.info(f"✅  T2 Target Hit for 22 & 33 EMA strategy! Booking final 1 lot at CMP ({latest_ce_ltp})")
                                     kite.place_order(
                                         variety=kite.VARIETY_REGULAR,
                                         exchange=kite.EXCHANGE_NFO,
@@ -853,9 +853,9 @@ while True:
                     time.sleep(1)
 
             if not ce_trigger:
-                logging.info(" CE Trigger Failed! No entry signal within 10 minutes.")
+                logging.info("❌  CE Trigger Failed for 22 & 33 EMA strategy! No entry signal within 10 minutes.")
         else:
-            logging.info(" CE Alert NOT satisfied. Skipping CE trigger monitoring.")
+            logging.info("❌  CE Alert NOT satisfied for 22 & 33 EMA strategy. Skipping CE trigger monitoring.")
 
 
 
@@ -907,7 +907,7 @@ while True:
             pe_green["close"] > pe_green["open"] and   # green candle
             pe_red["open"] > pe_red["ema_22"] > pe_red["close"]  # EMA-22 inside red candle
         ):
-            logging.info(" ALERT: Red-Green pair + EMA-33 rising + EMA-22 > EMA-33 + EMA-22 inside red candle (PE)")
+            logging.info(" ✅ ALERT: Alert condition satisfied for 22 & 33 EMA strategy")
 
             # Fetch live PE LTP
             try:
@@ -940,11 +940,11 @@ while True:
                     logging.error(f" Error fetching PE LTP or calculating targets: {e}")
 
         else:
-            logging.info(" PE Alert Condition NOT met. Skipping.")
+            logging.info("❌  PE Alert Condition NOT met for 22 & 33 EMA strategy. Skipping.")
 
 
         if pe_alert:
-            logging.info(" PE Alert Condition Satisfied (on OTM PE)! Monitoring next 10 minutes for live trigger...")
+            logging.info(" ✅ PE Alert Condition Satisfied (on OTM PE) for 22 & 33 EMA strategy! Monitoring next 10 minutes for live trigger...")
 
             pe_trigger = False
             trade_active_pe = False
@@ -965,7 +965,7 @@ while True:
 
                     if pe_ltp > active_alert["trigger_high"]:
                         pe_trigger = True
-                        logging.info(f" PE Trigger Success! Executing Buy Order at LTP: {pe_ltp}")
+                        logging.info(f"✅  PE Trigger Success for 22 & 33 EMA strategy! Executing Buy Order at LTP: {pe_ltp}")
 
                         try:
                             order_id = kite.place_order(
@@ -1011,7 +1011,7 @@ while True:
 
                                 #  SL hit before T1 → exit full
                                 if latest_pe_ltp <= stop_loss and stop_loss != t1_target:
-                                    logging.info(f" SL Hit on PE before T1! Exiting full 2 lots at CMP ({latest_pe_ltp})")
+                                    logging.info(f"❌  SL Hit on PE before T1 for 22 & 33 EMA strategy! Exiting full 2 lots at CMP ({latest_pe_ltp})")
                                     kite.place_order(
                                         variety=kite.VARIETY_REGULAR,
                                         exchange=kite.EXCHANGE_NFO,
@@ -1026,7 +1026,7 @@ while True:
 
                                 #  SL hit after T1 (trailing SL) → sell 1 lot
                                 if latest_pe_ltp <= stop_loss and stop_loss == t1_target:
-                                    logging.info(f" Trailing SL Hit on PE! Exiting final 1 lot at CMP ({latest_pe_ltp})")
+                                    logging.info(f"❌  Trailing SL Hit on PE for 22 & 33 EMA strategy! Exiting final 1 lot at CMP ({latest_pe_ltp})")
                                     kite.place_order(
                                         variety=kite.VARIETY_REGULAR,
                                         exchange=kite.EXCHANGE_NFO,
@@ -1041,7 +1041,7 @@ while True:
 
                                 #  T1 Hit → sell 1 lot, trail SL and update target
                                 if latest_pe_ltp >= current_target and current_target == t1_target:
-                                    logging.info(f" T1 Target Hit on PE! Booking 1 lot at CMP ({latest_pe_ltp})")
+                                    logging.info(f" ✅ T1 Target Hit on PE for 22 & 33 EMA strategy! Booking 1 lot at CMP ({latest_pe_ltp})")
                                     kite.place_order(
                                         variety=kite.VARIETY_REGULAR,
                                         exchange=kite.EXCHANGE_NFO,
@@ -1058,7 +1058,7 @@ while True:
 
                                 #  T2 Hit → sell final 1 lot
                                 if latest_pe_ltp >= current_target and current_target == t2_target:
-                                    logging.info(f" T2 Target Hit on PE! Booking final 1 lot at CMP ({latest_pe_ltp})")
+                                    logging.info(f"✅  T2 Target Hit on PE for 22 & 33 EMA strategy! Booking final 1 lot at CMP ({latest_pe_ltp})")
                                     kite.place_order(
                                         variety=kite.VARIETY_REGULAR,
                                         exchange=kite.EXCHANGE_NFO,
@@ -1084,9 +1084,305 @@ while True:
                     time.sleep(1)
 
             if not pe_trigger:
-                logging.info(" PE Trigger Failed! No entry signal within 10 minutes.")
+                logging.info(" ❌ PE Trigger Failed for 22 & 33 EMA strategy! No entry signal within 10 minutes.")
         else:
-            logging.info(" PE Alert NOT satisfied. Skipping PE trigger monitoring.")
+            logging.info("❌  PE Alert NOT satisfied for 22 & 33 EMA strategy. Skipping PE trigger monitoring.")
 
-    
+        #Strategy 2 checks (for DI Xover along with Supertrend lower check)
+
+
+        cur.execute(f"""
+            SELECT timestamp, open, high, low, close, di_plus, di_minus,
+                max_channel, min_channel, supertrend_avg
+            FROM {ce_table}
+            WHERE di_plus IS NOT NULL AND di_minus IS NOT NULL AND max_channel IS NOT NULL
+                AND min_channel IS NOT NULL AND supertrend_avg IS NOT NULL
+            ORDER BY timestamp DESC
+            LIMIT 3;
+        """)
+        ce2_rows = cur.fetchall()
+
+        if len(ce2_rows) < 3:
+            logging.warning("📉 Strategy 2: Not enough CE candles to evaluate alert condition.")
+            time.sleep(1)
+            continue
+
+        ce2_rows.reverse()
+
+        ce2_candles = []
+        for row in ce2_rows:
+            ce2_candles.append({
+                "timestamp": row[0],
+                "open": row[1],
+                "high": row[2],
+                "low": row[3],
+                "close": row[4],
+                "di_plus": row[5],
+                "di_minus": row[6],
+                "max_channel": row[7],
+                "min_channel": row[8],
+                "supertrend_avg": row[9]
+            })
+
+        # Strategy 2 Alert conditions check part 
+        latest = ce2_candles[-1]
+        prev = ce2_candles[-2]
+        prev2 = ce2_candles[-3]
+
+        ce_alert_strat2 = False
+
+        # crossover
+        crossover_condition = (
+            prev["di_plus"] < prev["di_minus"] and
+            latest["di_plus"] > latest["di_minus"] and
+            latest["di_plus"] >= 20
+        )
+
+        #channel_condition
+        channel_condition = (
+            (prev["low"] < prev["min_channel"] and prev["high"] > prev["min_channel"]) or
+            (prev2["low"] < prev2["min_channel"] and prev2["high"] > prev2["min_channel"])
+        )
+
+        if crossover_condition and channel_condition:
+            ce_alert_strat2 = True
+            active_alert["timestamp"] = latest["timestamp"]
+            active_alert["trigger_high"] = latest["high"]
+            active_alert["stop_loss"] = latest["low"]  #  will update this logic later to dynamic close candle comparison with the supertrend lower channel
+            active_alert["target"] = latest["supertrend_avg"]
+
+            logging.info("✅ CE Alert Condition Satisfied for DI+ Crossover & Supertrend Channel Strategy")
+        else:
+            logging.info("❌ CE Alert Condition NOT met for DI+ Crossover & Supertrend Channel Strategy. Skipping.")
+
+        if ce_alert_strat2:
+            logging.info("✅  CE Alert Condition Satisfied (on OTM CE) for Strategy 2! Executing trade immediately...")
+
+            ce2_trigger = True  # No waiting for trigger condition
+            trade_active_ce2 = False
+
+            try:
+                order_id = kite.place_order(
+                    variety=kite.VARIETY_REGULAR,
+                    exchange=kite.EXCHANGE_NFO,
+                    tradingsymbol=ce_symbol,
+                    transaction_type=kite.TRANSACTION_TYPE_BUY,
+                    quantity=0,  # 2 lots
+                    order_type=kite.ORDER_TYPE_MARKET,
+                    product=kite.PRODUCT_MIS
+                )
+
+                logging.info(f" CE Buy Order Placed for Strategy 2: {ce_symbol} | Order ID: {order_id}")
+
+                entry_price = ce_ltp  # assume previously fetched
+                stop_loss = latest["low"]
+                target = latest["supertrend_avg"]
+
+                logging.info(f" Monitoring CE Trade (Strategy 2) | SL: {stop_loss}, Target: {target}")
+                trade_active_ce2 = True
+
+            except Exception as e:
+                logging.error(f" CE Buy Order Failed for Strategy 2: {e}")
+
+            # Trade Monitoring Loop
+            while trade_active_ce2:
+                try:
+                    ce_ltp_data = kite.ltp(ce_symbol)
+                    latest_ce_ltp = ce_ltp_data.get(ce_symbol, {}).get("last_price")
+
+                    if latest_ce_ltp is None:
+                        logging.warning("Failed to fetch CE LTP (Strategy 2). Retrying...")
+                        time.sleep(1)
+                        continue
+
+                    logging.info(f"Strategy 2 CE LTP: {latest_ce_ltp}")
+
+                    # SL Hit → exit both lots
+                    if latest_ce_ltp <= stop_loss:
+                        logging.info(f"❌ SL Hit (Strategy 2 CE)! Exiting both lots at CMP: {latest_ce_ltp}")
+                        kite.place_order(
+                            variety=kite.VARIETY_REGULAR,
+                            exchange=kite.EXCHANGE_NFO,
+                            tradingsymbol=ce_symbol,
+                            transaction_type=kite.TRANSACTION_TYPE_SELL,
+                            quantity=0,  # 2 lots
+                            order_type=kite.ORDER_TYPE_MARKET,
+                            product=kite.PRODUCT_MIS
+                        )
+                        trade_active_ce2 = False
+                        break
+
+                    # Target Hit → exit both lots
+                    if latest_ce_ltp >= target:
+                        logging.info(f"✅ Target Hit (Strategy 2 CE)! Booking both lots at CMP: {latest_ce_ltp}")
+                        kite.place_order(
+                            variety=kite.VARIETY_REGULAR,
+                            exchange=kite.EXCHANGE_NFO,
+                            tradingsymbol=ce_symbol,
+                            transaction_type=kite.TRANSACTION_TYPE_SELL,
+                            quantity=0,  # 2 lots
+                            order_type=kite.ORDER_TYPE_MARKET,
+                            product=kite.PRODUCT_MIS
+                        )
+                        trade_active_ce2 = False
+                        break
+
+                    time.sleep(1)
+
+                except Exception as e:
+                    logging.error(f" Error during Strategy 2 CE trade monitoring: {e}")
+                    time.sleep(1)
+
+        else:
+            logging.info("❌ CE Alert NOT satisfied for Strategy 2. Skipping CE trade.")
+
+
+        #  PE: Strategy 2 PE Alert Check - Fetch required columns for DI & Supertrend Strategy
+        cur.execute(f"""
+            SELECT timestamp, open, high, low, close, di_plus, di_minus, max_channel, min_channel, supertrend_avg
+            FROM {pe_table}
+            WHERE di_plus IS NOT NULL AND di_minus IS NOT NULL AND max_channel IS NOT NULL AND min_channel IS NOT NULL AND supertrend_avg IS NOT NULL
+            ORDER BY timestamp DESC
+            LIMIT 3;
+        """)
+        pe_rows = cur.fetchall()
+
+        if len(pe_rows) < 3:
+            logging.warning("Not enough PE candles to evaluate Strategy 2 alert condition.")
+            time.sleep(1)
+            continue
+
+        pe_rows.reverse()
+
+        pe2_candles = []
+        for row in pe_rows:
+            pe2_candles.append({
+                "timestamp": row[0],
+                "open": row[1],
+                "high": row[2],
+                "low": row[3],
+                "close": row[4],
+                "di_plus": row[5],
+                "di_minus": row[6],
+                "max_channel": row[7],
+                "min_channel": row[8],
+                "supertrend_avg": row[9]
+            })
+
+        pe_alert_strat2 = False
+
+        #  Strategy 2 PE Alert Check: ADX + Supertrend Channel
+        latest = pe2_candles[-1]
+        prev = pe2_candles[-2]
+        prev2 = pe2_candles[-3]
+
+        # Condition A: DI+ crossover above DI- and DI+ ≥ 20
+        crossover_condition = (
+            prev["di_plus"] < prev["di_minus"] and
+            latest["di_plus"] > latest["di_minus"] and
+            latest["di_plus"] >= 20
+        )
+
+        # Condition B: Supertrend channel breakout from prev or prev2
+        channel_condition = (
+            (prev["low"] < prev["min_channel"] and prev["high"] > prev["min_channel"]) or
+            (prev2["low"] < prev2["min_channel"] and prev2["high"] > prev2["min_channel"])
+        )
+
+        if crossover_condition and channel_condition:
+            pe_alert_strat2 = True
+            active_alert["timestamp"] = latest["timestamp"]
+            active_alert["trigger_high"] = latest["high"]
+            active_alert["stop_loss"] = latest["low"]  # Will update to dynamic ST logic later
+            active_alert["target"] = latest["supertrend_avg"]
+
+            logging.info("✅ PE Alert Condition Satisfied for DI+ Crossover & Supertrend Channel Strategy")
+        else:
+            logging.info("❌ PE Alert Condition NOT met for DI+ Crossover & Supertrend Channel Strategy. Skipping.")
+
+        if pe_alert_strat2:
+            logging.info("✅ PE Alert Condition Satisfied (on OTM PE) for DI+ Crossover & Supertrend Channel Strategy! Executing Trade...")
+
+            pe2_trigger = True
+            trade_active_pe2 = False
+
+            try:
+                pe_ltp_data = kite.ltp(pe_symbol)
+                pe_ltp = pe_ltp_data.get(pe_symbol, {}).get("last_price")
+
+                if pe_ltp is None:
+                    logging.warning("❌ Unable to fetch PE LTP. Aborting Strategy 2 PE trade.")
+                else:
+                    order_id = kite.place_order(
+                        variety=kite.VARIETY_REGULAR,
+                        exchange=kite.EXCHANGE_NFO,
+                        tradingsymbol=pe_symbol,
+                        transaction_type=kite.TRANSACTION_TYPE_BUY,
+                        quantity=0,  # 2 lots
+                        order_type=kite.ORDER_TYPE_MARKET,
+                        product=kite.PRODUCT_MIS
+                    )
+
+                    logging.info(f"🛒 PE Buy Order Placed for Strategy 2: {pe_symbol} | Order ID: {order_id}")
+                    entry_price = pe_ltp
+                    stop_loss = active_alert["stop_loss"]
+                    target = active_alert["target"]
+                    trade_active_pe2 = True
+                    logging.info(f" PE Entry: {entry_price}, SL: {stop_loss}, Target: {target}")
+
+            except Exception as e:
+                logging.error(f"❌ PE Buy Order Failed for Strategy 2: {e}")
+
+            # Monitoring trade for PE Strategy 2
+            while trade_active_pe2:
+                try:
+                    pe_ltp_data = kite.ltp(pe_symbol)
+                    latest_pe_ltp = pe_ltp_data.get(pe_symbol, {}).get("last_price")
+
+                    if latest_pe_ltp is None:
+                        logging.warning(" Failed to fetch PE LTP during Strategy 2 trade. Retrying...")
+                        time.sleep(1)
+                        continue
+
+                    logging.info(f" PE LTP in Trade (Strategy 2): {latest_pe_ltp}")
+
+                    if latest_pe_ltp <= stop_loss:
+                        logging.info(f"❌ SL Hit on PE (Strategy 2)! Exiting full 2 lots at CMP ({latest_pe_ltp})")
+                        kite.place_order(
+                            variety=kite.VARIETY_REGULAR,
+                            exchange=kite.EXCHANGE_NFO,
+                            tradingsymbol=pe_symbol,
+                            transaction_type=kite.TRANSACTION_TYPE_SELL,
+                            quantity=0,  # 2 lots
+                            order_type=kite.ORDER_TYPE_MARKET,
+                            product=kite.PRODUCT_MIS
+                        )
+                        trade_active_pe2 = False
+                        break
+
+                    if latest_pe_ltp >= target:
+                        logging.info(f"✅ Target Hit on PE (Strategy 2)! Booking full 2 lots at CMP ({latest_pe_ltp})")
+                        kite.place_order(
+                            variety=kite.VARIETY_REGULAR,
+                            exchange=kite.EXCHANGE_NFO,
+                            tradingsymbol=pe_symbol,
+                            transaction_type=kite.TRANSACTION_TYPE_SELL,
+                            quantity=0,  # 2 lots
+                            order_type=kite.ORDER_TYPE_MARKET,
+                            product=kite.PRODUCT_MIS
+                        )
+                        trade_active_pe2 = False
+                        break
+
+                    time.sleep(1)
+
+                except Exception as e:
+                    logging.error(f" Error while monitoring PE Strategy 2 trade: {e}")
+                    time.sleep(1)
+
+        else:
+            logging.info("❌ PE Alert NOT satisfied for DI+ Crossover & Supertrend Channel Strategy. Skipping PE Strategy 2 monitoring.")
+
+
+
     time.sleep(1) # Small delay to avoid excessive CPU usage 

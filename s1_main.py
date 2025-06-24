@@ -21,8 +21,8 @@ logging.info(" Required libraries imported successfully.")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 #  API Credentials
-API_KEY = "8re7mjcm2btaozwf"  #  Replace with your actual API key
-API_SECRET = "fw8gm7wfeclcic9rlkp0tbzx4h2ss2n1"  # Replace with your actual API secret
+API_KEY = "api_key"  #  Replace with your actual API key
+API_SECRET = "secret_key"  # Replace with your actual API secret
 ACCESS_TOKEN_FILE = "access_token.txt"
 
 #  Initialize KiteConnect
@@ -903,10 +903,15 @@ def calculate_adx_for_table(table_name: str, period: int = 2):
         df["+dm_smooth"] = 0.0
         df["-dm_smooth"] = 0.0
 
-        # Seed values
-        df.loc[period, "tr_smooth"] = df["tr"].iloc[1:period+1].sum()
-        df.loc[period, "+dm_smooth"] = df["+dm"].iloc[1:period+1].sum()
-        df.loc[period, "-dm_smooth"] = df["-dm"].iloc[1:period+1].sum()
+        # Fix 1: Use iloc[0:period] instead of [1:period+1] for PineScript match
+        df.loc[period, "tr_smooth"] = df["tr"].iloc[0:period].sum()
+        df.loc[period, "+dm_smooth"] = df["+dm"].iloc[0:period].sum()
+        df.loc[period, "-dm_smooth"] = df["-dm"].iloc[0:period].sum()
+
+        # Fix 2: Initialize first row for safe smoothing
+        df.loc[0, "tr_smooth"] = df.loc[0, "tr"]
+        df.loc[0, "+dm_smooth"] = df.loc[0, "+dm"]
+        df.loc[0, "-dm_smooth"] = df.loc[0, "-dm"]
 
         # Wilder smoothing
         for i in range(period + 1, len(df)):
