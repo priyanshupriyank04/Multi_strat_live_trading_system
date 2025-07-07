@@ -21,8 +21,8 @@ logging.info(" Required libraries imported successfully.")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 #  API Credentials
-API_KEY = "api_key"  #  Replace with your actual API key
-API_SECRET = "secret_key"  # Replace with your actual API secret
+API_KEY = "8re7mjcm2btaozwf"  #  Replace with your actual API key
+API_SECRET = "fw8gm7wfeclcic9rlkp0tbzx4h2ss2n1"  # Replace with your actual API secret
 ACCESS_TOKEN_FILE = "access_token.txt"
 
 #  Initialize KiteConnect
@@ -171,19 +171,20 @@ def get_custom_nifty_expiry():
 
 
 
-    if today <= datetime.date(today.year, 6, 5):
-        return datetime.date(today.year, 6, 5)  # Weekly expiry
-    elif today <= datetime.date(today.year, 6, 12):
-        return datetime.date(today.year, 6, 12)  # Weekly expiry
-    elif today <= datetime.date(today.year, 6, 19):
-        return datetime.date(today.year, 6, 19)  # Monthly expiry
-    elif today <= datetime.date(today.year, 6, 26):
-        return datetime.date(today.year, 6, 26)  # Weekly expiry
-    elif today <= datetime.date(today.year, 7, 3):
-        return datetime.date(today.year, 7, 3)  # Weekly expiry
+    if today <= datetime.date(today.year, 7, 10):
+        return datetime.date(today.year, 7, 10)  # Weekly expiry
+    elif today <= datetime.date(today.year, 7, 17):
+        return datetime.date(today.year, 7, 17)  # Weekly expiry
+    elif today <= datetime.date(today.year, 7, 24):
+        return datetime.date(today.year, 7, 24)  # Weekly expiry
+    elif today <= datetime.date(today.year, 7, 31):
+        return datetime.date(today.year, 7, 31)  # Monthly expiry (default)
+    elif today <= datetime.date(today.year, 8, 7):
+        return datetime.date(today.year, 8, 7)  # Weekly expiry
     else:
         logging.error(" No predefined expiry date available for current date.")
         return None
+
 
 
 # Find the nearest OTM CE contract based on the Nifty index price
@@ -2066,8 +2067,8 @@ kill_existing_websockets()
 logging.info(" Starting WebSocket connection...")
 kws.connect(threaded=True)
 
-#  Process OHLC Data Every Second (Live loop)
+#  Process OHLC Data Every half-second (Live loop)
 while True:
     process_ohlc_candle()
-    time.sleep(1)
+    time.sleep(0.5)
 

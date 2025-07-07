@@ -1,7 +1,3 @@
-"""This file handles the realtime checking of the strategy on the nearest itm ce/pe contract value
-    and based on that takes an entry in possible trend reversion setup and works
-        accordingly."""
-
 #  Step 1: Import Required Libraries
 import os                # For environment variables and file handling
 import time              # For adding delays where needed
@@ -26,8 +22,8 @@ logging.info(" Required libraries imported successfully.")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 #  API Credentials
-API_KEY = "your_api_key"  #  Replace with your actual API key
-API_SECRET = "secret_key"  #  Replace with your actual API secret
+API_KEY = "8re7mjcm2btaozwf"  #  Replace with your actual API key
+API_SECRET = "fw8gm7wfeclcic9rlkp0tbzx4h2ss2n1"  #  Replace with your actual API secret
 ACCESS_TOKEN_FILE = "access_token.txt"
 
 #  Initialize KiteConnect
@@ -249,19 +245,20 @@ def get_custom_nifty_expiry():
 
 
 
-    if today <= datetime.date(today.year, 6, 5):
-        return datetime.date(today.year, 6, 5)  # Weekly expiry
-    elif today <= datetime.date(today.year, 6, 12):
-        return datetime.date(today.year, 6, 12)  # Weekly expiry
-    elif today <= datetime.date(today.year, 6, 19):
-        return datetime.date(today.year, 6, 19)  # Monthly expiry
-    elif today <= datetime.date(today.year, 6, 26):
-        return datetime.date(today.year, 6, 26)  # Weekly expiry
-    elif today <= datetime.date(today.year, 7, 3):
-        return datetime.date(today.year, 7, 3)  # Weekly expiry
+    if today <= datetime.date(today.year, 7, 10):
+        return datetime.date(today.year, 7, 10)  # Weekly expiry
+    elif today <= datetime.date(today.year, 7, 17):
+        return datetime.date(today.year, 7, 17)  # Weekly expiry
+    elif today <= datetime.date(today.year, 7, 24):
+        return datetime.date(today.year, 7, 24)  # Weekly expiry
+    elif today <= datetime.date(today.year, 7, 31):
+        return datetime.date(today.year, 7, 31)  # Monthly expiry (default)
+    elif today <= datetime.date(today.year, 8, 7):
+        return datetime.date(today.year, 8, 7)  # Weekly expiry
     else:
         logging.error(" No predefined expiry date available for current date.")
         return None
+
 
 
 # Find the nearest OTM CE contract based on the nifty index price
@@ -502,7 +499,6 @@ tokens_to_subscribe = [NIFTY_50_TOKEN] + all_tokens
 logging.info(f" Total tokens to subscribe via WebSocket: {len(tokens_to_subscribe)}")
 
 #  WebSocket Event Handlers for Option Strategy Execution
-
 def on_connect(ws, response):
     """Handles WebSocket connection."""
     logging.info("WebSocket Connected. Subscribing to all tokens...")
@@ -564,6 +560,7 @@ strategy_ws.on_reconnect = on_reconnect
 #  Launch WebSocket (non-blocking)
 logging.info(" Launching WebSocket for Option Strategy Execution...")
 strategy_ws.connect(threaded=True)
+
 
 #  Infinite Loop to Continuously Check for New 5-Minute Data
 while True:
@@ -668,45 +665,40 @@ while True:
 
         # Combined alert condition in one block
         if (
-            ce_candles[-3]["ema_33"] <= ce_candles[-2]["ema_33"] <= ce_candles[-1]["ema_33"] and #33 EMA rising condition 
-            ce_candles[-3]["ema_22"] > ce_candles[-3]["ema_33"] and     # 22 EMA above 33 ema condition                          
+            ce_candles[-3]["ema_33"] <= ce_candles[-2]["ema_33"] <= ce_candles[-1]["ema_33"] and  # 33 EMA rising condition 
+            ce_candles[-3]["ema_22"] > ce_candles[-3]["ema_33"] and                                # 22 EMA above 33 EMA
             ce_candles[-2]["ema_22"] > ce_candles[-2]["ema_33"] and
             ce_candles[-1]["ema_22"] > ce_candles[-1]["ema_33"] and
             ce_red["close"] < ce_red["open"] and        # red candle check 
-            ce_green["close"] > ce_green["open"] and    #green candle check 
-            ce_red["open"] > ce_red["ema_22"] > ce_red["close"] #
+            ce_green["close"] > ce_green["open"] and    # green candle check 
+            ce_red["open"] > ce_red["ema_22"] > ce_red["close"]
         ):
             logging.info("✅ All alert conditions satisfied for 22 & 33 EMA strategy moving to trigger condition check")
 
-            # Fetch live CE LTP
-            try:
-                ce_ltp_data = kite.ltp(ce_symbol)
-                ce_ltp = ce_ltp_data.get(ce_symbol, {}).get("last_price")
+            # Use WebSocket LTP
+            ce_ltp = latest_ce_price
 
-                if ce_ltp is None:
-                    logging.warning(" Unable to fetch CE LTP for T1/T2 calculation. Skipping alert.")
-                else:
-                    # Compute T1 and T2
-                    green_close = ce_green["close"]
-                    green_low = ce_green["low"]
-                    risk = abs(green_close - green_low)
+            if ce_ltp is None:
+                logging.warning(" Unable to fetch CE LTP for T1/T2 calculation. Skipping alert.")
+            else:
+                # Compute T1 and T2
+                green_close = ce_green["close"]
+                green_low = ce_green["low"]
+                risk = abs(green_close - green_low)
 
-                    t1_target = round(ce_ltp + risk, 2)
-                    t2_target = round(ce_ltp + 2 * risk, 2)
+                t1_target = round(ce_ltp + risk, 2)
+                t2_target = round(ce_ltp + 2 * risk, 2)
 
-                    # Mark alert and save details
-                    ce_alert = True
-                    active_alert["timestamp"] = ce_green["timestamp"]
-                    active_alert["trigger_high"] = ce_green["high"]
-                    active_alert["stop_loss"] = green_low
-                    active_alert["target"] = t1_target  # First target set as 1:1 RR
+                # Mark alert and save details
+                ce_alert = True
+                active_alert["timestamp"] = ce_green["timestamp"]
+                active_alert["trigger_high"] = ce_green["high"]
+                active_alert["stop_loss"] = green_low
+                active_alert["target"] = t1_target  # First target set as 1:1 RR
 
-                    trigger_monitoring_start = datetime.datetime.now()
+                trigger_monitoring_start = datetime.datetime.now()
 
-                    logging.info(f" CE LTP: {ce_ltp}, T1: {t1_target}, T2: {t2_target}")
-
-            except Exception as e:
-                logging.error(f" Error fetching CE LTP or calculating targets: {e}")
+                logging.info(f" CE LTP: {ce_ltp}, T1: {t1_target}, T2: {t2_target}")
 
         else:
             logging.info("❌  CE Alert Condition NOT met for 22 & 33 EMA strategy. Skipping.")
@@ -722,8 +714,7 @@ while True:
 
             while datetime.datetime.now() - start_time <= trigger_window:
                 try:
-                    ce_ltp_data = kite.ltp(ce_symbol)
-                    ce_ltp = ce_ltp_data.get(ce_symbol, {}).get("last_price")
+                    ce_ltp = latest_ce_price
 
                     if ce_ltp is None:
                         logging.warning(" CE LTP fetch failed. Retrying...")
@@ -768,8 +759,7 @@ while True:
                         #  Trade Monitoring Loop
                         while trade_active_ce:
                             try:
-                                ce_ltp_data = kite.ltp(ce_symbol)
-                                latest_ce_ltp = ce_ltp_data.get(ce_symbol, {}).get("last_price")
+                                latest_ce_ltp = latest_ce_price
 
                                 if latest_ce_ltp is None:
                                     logging.warning(" Failed to fetch CE LTP during trade. Retrying...")
@@ -786,7 +776,7 @@ while True:
                                         exchange=kite.EXCHANGE_NFO,
                                         tradingsymbol=ce_symbol,
                                         transaction_type=kite.TRANSACTION_TYPE_SELL,
-                                        quantity=0, #2 lots
+                                        quantity=0,  # 2 lots
                                         order_type=kite.ORDER_TYPE_MARKET,
                                         product=kite.PRODUCT_MIS
                                     )
@@ -801,7 +791,7 @@ while True:
                                         exchange=kite.EXCHANGE_NFO,
                                         tradingsymbol=ce_symbol,
                                         transaction_type=kite.TRANSACTION_TYPE_SELL,
-                                        quantity=0, #1 lot
+                                        quantity=0,  # 1 lot
                                         order_type=kite.ORDER_TYPE_MARKET,
                                         product=kite.PRODUCT_MIS
                                     )
@@ -816,7 +806,7 @@ while True:
                                         exchange=kite.EXCHANGE_NFO,
                                         tradingsymbol=ce_symbol,
                                         transaction_type=kite.TRANSACTION_TYPE_SELL,
-                                        quantity=0, # 1 lot
+                                        quantity=0,  # 1 lot
                                         order_type=kite.ORDER_TYPE_MARKET,
                                         product=kite.PRODUCT_MIS
                                     )
@@ -833,7 +823,7 @@ while True:
                                         exchange=kite.EXCHANGE_NFO,
                                         tradingsymbol=ce_symbol,
                                         transaction_type=kite.TRANSACTION_TYPE_SELL,
-                                        quantity=0, # 1 lot
+                                        quantity=0,  # 1 lot
                                         order_type=kite.ORDER_TYPE_MARKET,
                                         product=kite.PRODUCT_MIS
                                     )
@@ -853,7 +843,7 @@ while True:
                     time.sleep(1)
 
             if not ce_trigger:
-                logging.info("❌  CE Trigger Failed for 22 & 33 EMA strategy! No entry signal within 10 minutes.")
+                logging.info("❌ CE Trigger Failed for 22 & 33 EMA strategy! No entry signal within 10 minutes.")
         else:
             logging.info("❌  CE Alert NOT satisfied for 22 & 33 EMA strategy. Skipping CE trigger monitoring.")
 
@@ -909,35 +899,29 @@ while True:
         ):
             logging.info(" ✅ ALERT: Alert condition satisfied for 22 & 33 EMA strategy")
 
-            # Fetch live PE LTP
-            try:
-                pe_ltp_data = kite.ltp(pe_symbol)
-                pe_ltp = pe_ltp_data.get(pe_symbol, {}).get("last_price")
+            pe_ltp = latest_pe_price
 
-                if pe_ltp is None:
-                    logging.warning(" Unable to fetch PE LTP for T1/T2 calculation. Skipping alert.")
-                else:
-                    # Compute T1 and T2
-                    green_close = pe_green["close"]
-                    green_low = pe_green["low"]
-                    risk = abs(green_close - green_low)
+            if pe_ltp is None:
+                logging.warning(" Unable to fetch PE LTP for T1/T2 calculation. Skipping alert.")
+            else:
+                # Compute T1 and T2
+                green_close = pe_green["close"]
+                green_low = pe_green["low"]
+                risk = abs(green_close - green_low)
 
-                    t1_target = round(pe_ltp + risk, 2)
-                    t2_target = round(pe_ltp + 2 * risk, 2)
+                t1_target = round(pe_ltp + risk, 2)
+                t2_target = round(pe_ltp + 2 * risk, 2)
 
-                    # Mark alert and save details
-                    pe_alert = True
-                    active_alert["timestamp"] = pe_green["timestamp"]
-                    active_alert["trigger_high"] = pe_green["high"]
-                    active_alert["stop_loss"] = green_low
-                    active_alert["target"] = t1_target  # First target = 1:1 RR
+                # Mark alert and save details
+                pe_alert = True
+                active_alert["timestamp"] = pe_green["timestamp"]
+                active_alert["trigger_high"] = pe_green["high"]
+                active_alert["stop_loss"] = green_low
+                active_alert["target"] = t1_target  # First target = 1:1 RR
 
-                    trigger_monitoring_start = datetime.datetime.now()
+                trigger_monitoring_start = datetime.datetime.now()
 
-                    logging.info(f" PE LTP: {pe_ltp}, T1: {t1_target}, T2: {t2_target}")
-
-            except Exception as e:
-                    logging.error(f" Error fetching PE LTP or calculating targets: {e}")
+                logging.info(f" PE LTP: {pe_ltp}, T1: {t1_target}, T2: {t2_target}")
 
         else:
             logging.info("❌  PE Alert Condition NOT met for 22 & 33 EMA strategy. Skipping.")
@@ -953,8 +937,7 @@ while True:
 
             while datetime.datetime.now() - start_time <= trigger_window:
                 try:
-                    pe_ltp_data = kite.ltp(pe_symbol)
-                    pe_ltp = pe_ltp_data.get(pe_symbol, {}).get("last_price")
+                    pe_ltp = latest_pe_price
 
                     if pe_ltp is None:
                         logging.warning(" PE LTP fetch failed. Retrying...")
@@ -999,8 +982,7 @@ while True:
                         #  Trade Monitoring Loop
                         while trade_active_pe:
                             try:
-                                pe_ltp_data = kite.ltp(pe_symbol)
-                                latest_pe_ltp = pe_ltp_data.get(pe_symbol, {}).get("last_price")
+                                latest_pe_ltp = latest_pe_price
 
                                 if latest_pe_ltp is None:
                                     logging.warning(" Failed to fetch PE LTP during trade. Retrying...")
@@ -1017,7 +999,7 @@ while True:
                                         exchange=kite.EXCHANGE_NFO,
                                         tradingsymbol=pe_symbol,
                                         transaction_type=kite.TRANSACTION_TYPE_SELL,
-                                        quantity=0, # 2 lots
+                                        quantity=0,  # 2 lots
                                         order_type=kite.ORDER_TYPE_MARKET,
                                         product=kite.PRODUCT_MIS
                                     )
@@ -1032,7 +1014,7 @@ while True:
                                         exchange=kite.EXCHANGE_NFO,
                                         tradingsymbol=pe_symbol,
                                         transaction_type=kite.TRANSACTION_TYPE_SELL,
-                                        quantity=0, # 1 lot
+                                        quantity=0,  # 1 lot
                                         order_type=kite.ORDER_TYPE_MARKET,
                                         product=kite.PRODUCT_MIS
                                     )
@@ -1047,7 +1029,7 @@ while True:
                                         exchange=kite.EXCHANGE_NFO,
                                         tradingsymbol=pe_symbol,
                                         transaction_type=kite.TRANSACTION_TYPE_SELL,
-                                        quantity=0, # 1 lot
+                                        quantity=0,  # 1 lot
                                         order_type=kite.ORDER_TYPE_MARKET,
                                         product=kite.PRODUCT_MIS
                                     )
@@ -1064,7 +1046,7 @@ while True:
                                         exchange=kite.EXCHANGE_NFO,
                                         tradingsymbol=pe_symbol,
                                         transaction_type=kite.TRANSACTION_TYPE_SELL,
-                                        quantity=0, # 1 lot
+                                        quantity=0,  # 1 lot
                                         order_type=kite.ORDER_TYPE_MARKET,
                                         product=kite.PRODUCT_MIS
                                     )
@@ -1087,6 +1069,7 @@ while True:
                 logging.info(" ❌ PE Trigger Failed for 22 & 33 EMA strategy! No entry signal within 10 minutes.")
         else:
             logging.info("❌  PE Alert NOT satisfied for 22 & 33 EMA strategy. Skipping PE trigger monitoring.")
+
 
         #Strategy 2 checks (for DI Xover along with Supertrend lower check)
 
@@ -1148,7 +1131,7 @@ while True:
             ce_alert_strat2 = True
             active_alert["timestamp"] = latest["timestamp"]
             active_alert["trigger_high"] = latest["high"]
-            active_alert["stop_loss"] = latest["low"]  #  will update this logic later to dynamic close candle comparison with the supertrend lower channel
+            active_alert["stop_loss"] = latest["low"]  # will update this logic later to dynamic close candle comparison with the supertrend lower channel
             active_alert["target"] = latest["supertrend_avg"]
 
             logging.info("✅ CE Alert Condition Satisfied for DI+ Crossover & Supertrend Channel Strategy")
@@ -1174,7 +1157,8 @@ while True:
 
                 logging.info(f" CE Buy Order Placed for Strategy 2: {ce_symbol} | Order ID: {order_id}")
 
-                entry_price = ce_ltp  # assume previously fetched
+                ce_ltp = latest_ce_price  # Use WebSocket LTP
+                entry_price = ce_ltp
                 stop_loss = latest["low"]
                 target = latest["supertrend_avg"]
 
@@ -1187,8 +1171,7 @@ while True:
             # Trade Monitoring Loop
             while trade_active_ce2:
                 try:
-                    ce_ltp_data = kite.ltp(ce_symbol)
-                    latest_ce_ltp = ce_ltp_data.get(ce_symbol, {}).get("last_price")
+                    latest_ce_ltp = latest_ce_price  # Use WebSocket LTP
 
                     if latest_ce_ltp is None:
                         logging.warning("Failed to fetch CE LTP (Strategy 2). Retrying...")
@@ -1307,8 +1290,7 @@ while True:
             trade_active_pe2 = False
 
             try:
-                pe_ltp_data = kite.ltp(pe_symbol)
-                pe_ltp = pe_ltp_data.get(pe_symbol, {}).get("last_price")
+                pe_ltp = latest_pe_price
 
                 if pe_ltp is None:
                     logging.warning("❌ Unable to fetch PE LTP. Aborting Strategy 2 PE trade.")
@@ -1336,8 +1318,7 @@ while True:
             # Monitoring trade for PE Strategy 2
             while trade_active_pe2:
                 try:
-                    pe_ltp_data = kite.ltp(pe_symbol)
-                    latest_pe_ltp = pe_ltp_data.get(pe_symbol, {}).get("last_price")
+                    latest_pe_ltp = latest_pe_price
 
                     if latest_pe_ltp is None:
                         logging.warning(" Failed to fetch PE LTP during Strategy 2 trade. Retrying...")
@@ -1382,6 +1363,7 @@ while True:
 
         else:
             logging.info("❌ PE Alert NOT satisfied for DI+ Crossover & Supertrend Channel Strategy. Skipping PE Strategy 2 monitoring.")
+
 
 
 
